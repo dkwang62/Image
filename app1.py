@@ -3,89 +3,106 @@ import requests
 from PIL import Image
 import io
 
-st.set_page_config(layout="wide")
-st.title("🔍 Azure Vision API Image Analyzer")
+st.set_page_config(page_title="Azure Vision Analyzer", layout="wide")
 
-# --- User Inputs: Key and Endpoint ---
-st.sidebar.header("🔐 Azure Credentials")
-api_key = st.sidebar.text_input("Enter your Azure Vision API Key", type="password")
-endpoint = st.sidebar.text_input("Enter your Azure Endpoint (e.g. https://xxx.cognitiveservices.azure.com)")
+st.title("🧠 Azure AI Vision - Image Intelligence App")
 
-features = [
-    "tags",
-    "read",
-    "caption",
-    "denseCaptions",
-    "smartCrops",
-    "objects",
-    "people"
-]
+st.info("Upload an image and provide your Azure Vision Key and Endpoint.")
 
-# --- Image Upload ---
-uploaded_file = st.file_uploader("Upload an image", type=["jpg", "png", "jpeg"])
+# User Input for Azure Credentials
+endpoint = st.text_input("Azure Vision Endpoint (e.g. https://your-resource.cognitiveservices.azure.com/)", "")
+subscription_key = st.text_input("Azure Vision Key", type="password")
 
-if uploaded_file and api_key and endpoint:
-    # Load image
-    image_bytes = uploaded_file.read()
-    image = Image.open(io.BytesIO(image_bytes))
-    st.image(image, caption="Uploaded Image", use_container_width=True)
+features = ["tags", "read", "caption", "denseCaptions", "smartCrops", "objects", "people"]
 
-    # --- API Call ---
-    headers = {
-        "Ocp-Apim-Subscription-Key": api_key,
-        "Content-Type": "application/octet-stream"
-    }
+image_file = st.file_uploader("Upload an Image", type=["jpg", "jpeg", "png"])
 
-    params = {
-        "features": ",".join(features),
-        "language": "en"
-    }
-
+if image_file and endpoint and subscription_key:
     try:
-        with st.spinner("Analyzing image using Azure Vision API..."):
-            response = requests.post(
-                f"{endpoint}/computervision/imageanalysis:analyze?api-version=2023-10-01",
-                headers=headers,
-                params=params,
-                data=image_bytes
-            )
-            response.raise_for_status()
+        image_data = image_file.read()
+        image = Image.open(io.BytesIO(image_data))
+        st.image(image, caption="Uploaded Image", use_column_width=True)
+
+        # Call Azure Vision API
+        headers = {
+            "Ocp-Apim-Subscription-Key": subscription_key,
+            "Content-Type": "application/octet-stream"
+        }
+        params = {"features": ",".join(features), "language": "en"}
+        vision_url = f"{endpoint}/computervision/imageanalysis:analyze"
+        response = requests.post(vision_url, headers=headers, params=params, data=image_data)
+
+        if response.status_code != 200:
+            st.error(f"Azure API Error {response.status_code}: {response.text}")
+        else:
             result = response.json()
 
-        st.success("Image analyzed successfully!")
+            # Caption
+            try:
+                if "captionResult" in result:
+                    st.subheader("📝 Caption")
+                    st.write(result["captionResult"].get("text", "No caption found."))
+            except Exception as e:
+                st.error(f"Caption section error: {e}")
 
-        # --- Display Results ---
-        if "captionResult" in result and "text" in result["captionResult"]:
-            st.subheader("📝 Caption")
-            st.write(result["captionResult"]["text"])
+            # Tags
+            try:
+                if "tagsResult" in result:
+                    st.subheader("🏷️ Tags")
+                    for tag in result["tagsResult"]["values"]:
+                        name = tag.get("name", "Unknown")
+                        conf = tag.get("confidence", 0.0)
+                        st.write(f"- {name} (Confidence: {conf:.2f})")
+            except Exception as e:
+                st.error(f"Tags section error: {e}")
 
-        if "tagsResult" in result:
-            st.subheader("🏷️ Detected Tags")
-            for tag in result["tagsResult"]["values"]:
-                st.markdown(f"- {tag['name']} (Confidence: {tag['confidence']:.2f})")
+            # Dense Captions
+            try:
+                if "denseCaptionsResult" in result:
+                    st.subheader("🔍 Dense Captions")
+                    for item in result["denseCaptionsResult"]["values"]:
+                        st.write(f"- {item.get('text', 'No text')} (Confidence: {item.get('confidence', 0):.2f})")
+            except Exception as e:
+                st.error(f"Dense captions error: {e}")
 
-        if "readResult" in result and "blocks" in result["readResult"]:
-            st.subheader("📄 Text Read")
-            for block in result["readResult"]["blocks"]:
-                st.write(block["text"])
+            # Smart Crops
+            try:
+                if "smartCropsResult" in result:
+                    st.subheader("📐 Smart Crops")
+                    for crop in result["smartCropsResult"]["values"]:
+                        st.write(f"- Aspect Ratio: {crop.get('aspectRatio')} → {crop.get('boundingBox')}")
+            except Exception as e:
+                st.error(f"Smart Crops error: {e}")
 
-        if "denseCaptionsResult" in result:
-            st.subheader("🪄 Dense Captions")
-            for item in result["denseCaptionsResult"]["values"]:
-                st.write(f"• {item['text']}")
+            # Objects
+            try:
+                if "objectsResult" in result:
+                    st.subheader("🧱 Objects Detected")
+                    for obj in result["objectsResult"]["values"]:
+                        name = obj.get("name", "Unknown")
+                        conf = obj.get("confidence", 0.0)
+                        st.write(f"- {name} (Confidence: {conf:.2f})")
+            except Exception as e:
+                st.error(f"Objects section error: {e}")
 
-        if "objectsResult" in result:
-            st.subheader("🧱 Objects Detected")
-            for obj in result["objectsResult"]["values"]:
-                st.write(f"- {obj['name']} (Confidence: {obj['confidence']:.2f})")
+            # People
+            try:
+                if "peopleResult" in result:
+                    st.subheader("👥 People Detected")
+                    people_count = len(result["peopleResult"].get("values", []))
+                    st.write(f"{people_count} person{'s' if people_count != 1 else ''} detected.")
+            except Exception as e:
+                st.error(f"People section error: {e}")
 
-        if "peopleResult" in result:
-            st.subheader("🧍 People Detected")
-            people = result["peopleResult"]["values"]
-            st.write(f"Detected {len(people)} person(s).")
+            # Read (OCR)
+            try:
+                if "readResult" in result:
+                    st.subheader("📖 Text Detected (OCR)")
+                    for line in result["readResult"].get("blocks", []):
+                        for ln in line.get("lines", []):
+                            st.write(f"- {ln.get('text')}")
+            except Exception as e:
+                st.error(f"OCR section error: {e}")
 
     except Exception as e:
-        st.error(f"❌ Error: {e}")
-
-elif uploaded_file:
-    st.warning("Please enter your Azure Vision API key and endpoint in the sidebar.")
+        st.error(f"Unexpected error: {e}")
