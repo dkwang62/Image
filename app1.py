@@ -28,7 +28,7 @@ if uploaded_file and api_key and endpoint:
     # Load image
     image_bytes = uploaded_file.read()
     image = Image.open(io.BytesIO(image_bytes))
-    st.image(image, caption="Uploaded Image", use_column_width=True)
+    st.image(image, caption="Uploaded Image", use_container_width=True)
 
     # --- API Call ---
     headers = {
